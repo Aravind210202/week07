@@ -9,7 +9,7 @@ on:
       - ".github/workflows/backend_ci.yml"
 
 env:
-  # Secrets you already created:
+  # Set from repo secrets
   ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}   # e.g. aravindtask7.azurecr.io
   ACR_NAME:         ${{ secrets.ACR_NAME }}           # e.g. aravindtask7
   IMAGE_TAG:        ${{ github.sha }}-${{ github.run_id }}
@@ -88,28 +88,46 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Azure Login
+      - name: Azure Login (service principal)
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # IMPORTANT: use the REGISTRY NAME here, not the login server
+      # Derive missing envs if a secret was not set (safety net)
+      - name: Ensure ACR env
+        run: |
+          if [ -z "${ACR_NAME}" ] && [ -n "${ACR_LOGIN_SERVER}" ]; then
+            echo "ACR_NAME=${ACR_LOGIN_SERVER%%.*}" >> $GITHUB_ENV
+          fi
+          if [ -z "${ACR_LOGIN_SERVER}" ] && [ -n "${ACR_NAME}" ]; then
+            echo "ACR_LOGIN_SERVER=$(az acr show -n ${ACR_NAME} --query loginServer -o tsv)" >> $GITHUB_ENV
+          fi
+
       - name: Login to Azure Container Registry
-        run: az acr login --name ${{ env.ACR_NAME }}
+        run: az acr login --name ${ACR_NAME}
 
-      - name: Build and Push Product Service Image
-        run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/product_service:${{ env.IMAGE_TAG }} ./backend/product_service/
-          docker push ${{ env.ACR_LOGIN_SERVER }}/product_service:${{ env.IMAGE_TAG }}
-          docker tag  ${{ env.ACR_LOGIN_SERVER }}/product_service:${{ env.IMAGE_TAG }} ${{ env.ACR_LOGIN_SERVER }}/product_service:latest
-          docker push ${{ env.ACR_LOGIN_SERVER }}/product_service:latest
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build and Push Order Service Image
-        run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/order_service:${{ env.IMAGE_TAG }} ./backend/order_service/
-          docker push ${{ env.ACR_LOGIN_SERVER }}/order_service:${{ env.IMAGE_TAG }}
-          docker tag  ${{ env.ACR_LOGIN_SERVER }}/order_service:${{ env.IMAGE_TAG }} ${{ env.ACR_LOGIN_SERVER }}/order_service:latest
-          docker push ${{ env.ACR_LOGIN_SERVER }}/order_service:latest
+      - name: Build & Push product_service
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend/product_service
+          file: ./backend/product_service/Dockerfile
+          push: true
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/product_service:${{ env.IMAGE_TAG }}
+            ${{ env.ACR_LOGIN_SERVER }}/product_service:latest
+
+      - name: Build & Push order_service
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend/order_service
+          file: ./backend/order_service/Dockerfile
+          push: true
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/order_service:${{ env.IMAGE_TAG }}
+            ${{ env.ACR_LOGIN_SERVER }}/order_service:latest
 
       - name: Logout from Azure
         if: always()
