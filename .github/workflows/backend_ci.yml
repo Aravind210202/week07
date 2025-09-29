@@ -20,10 +20,10 @@ on:
 env:
   # ACR Login Server (e.g., myregistry.azurecr.io)
   # This needs to be set as a GitHub Repository Secret
-  ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
-  # Dynamically generate image tags based on Git SHA and GitHub Run ID
-  # This provides unique, traceable tags for each image build
-  IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}
+  ACR_LOGIN_SERVER: ${{ secrets.AZURE_LOGIN_SERVER }}
+  ACR_NAME:         ${{ secrets.ACR_NAME }}
+  IMAGE_TAG:        ${{ github.sha }}-${{ github.run_id }}
+
 
 jobs:
   # Job 1: Run tests and linting for all backend services
@@ -137,7 +137,7 @@ jobs:
     # Build and Push Docker image for Order Service
     - name: Build and Push Order Service Image
       run: |
-        docker build -t ${{ env.ACR_LOGIN_SERVER }}/order_service:latest ./backend/order_service/
+        docker build -t ${{ env.ACR_LOGIN_SERVER }}/order_service:latest./backend/order_service/
         docker push ${{ env.ACR_LOGIN_SERVER }}/order_service:latest
 
     # Logout from Azure for security (runs even if image push fails)
